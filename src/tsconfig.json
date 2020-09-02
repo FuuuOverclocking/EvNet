@@ -1,0 +1,11 @@
+{
+   "extends": "../tsconfig.base.json",
+   "compilerOptions": {
+      "baseUrl": "./",
+      "charset": "utf8",
+      "module": "es2015",
+      "moduleResolution": "node",
+      "strict": true
+   },
+   "include": ["./**/*.ts"]
+}

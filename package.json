@@ -1,0 +1,86 @@
+{
+   "name": "evnet",
+   "version": "1.0.0",
+   "description": "The library for visual data flow programming.",
+   "main": "./entry.js",
+   "module": "./esm/entry.js",
+   "unpkg": "./umd/eventnet.js",
+   "jsdelivr": "./umd/eventnet.js",
+   "typings": "./typings/entry.d.ts",
+   "sideEffects": false,
+   "scripts": {
+      "build:help": "node scripts/build.js --help",
+      "build": "node scripts/build.js",
+      "build:prod": "node scripts/build.js --entry prod",
+      "build:dev": "node scripts/build.js --entry dev",
+      "build:all": "node scripts/build.js --all-entries",
+      "release": "node scripts/release.js",
+      "test": "jest -c tests/jest.config.js",
+      "test:umd": "cross-env TEST_VERSION=umd jest -c tests/jest.config.js",
+      "test:cover": "jest -c tests/jest.config.cover.js",
+      "commit": "git-cz",
+      "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
+      "lint": "tslint --fix -c tslint.json 'src/**/*.ts'"
+   },
+   "repository": {
+      "type": "git",
+      "url": "git+https://github.com/xyzingh/EvNet.git"
+   },
+   "keywords": [
+      "evnet",
+      "fbp",
+      "flow-based-programming",
+      "debugger",
+      "debugger-visualizer",
+      "visual-programming",
+      "data-flow",
+      "data-flow-programming"
+   ],
+   "author": "X.Y.Z.",
+   "license": "MIT",
+   "bugs": {
+      "url": "https://github.com/xyzingh/EvNet/issues"
+   },
+   "homepage": "https://evnet.justlog.xyz/",
+   "config": {
+      "commitizen": {
+         "path": "./node_modules/cz-conventional-changelog"
+      }
+   },
+   "dependencies": {
+      "tslib": "^2.0.0",
+      "ws": "^7.3.1"
+   },
+   "devDependencies": {
+      "@types/fs-extra": "^9.0.1",
+      "@types/jest": "^26.0.12",
+      "@types/node": "^14.0.23",
+      "@types/ws": "^7.2.6",
+      "@types/yargs": "^15.0.5",
+      "@typescript-eslint/eslint-plugin": "^4.0.1",
+      "@typescript-eslint/parser": "^4.0.1",
+      "chalk": "^4.1.0",
+      "commitizen": "^4.1.2",
+      "conventional-changelog-cli": "^2.0.34",
+      "cross-env": "^7.0.2",
+      "cz-conventional-changelog": "^3.2.0",
+      "eslint": "^7.8.0",
+      "eslint-config-prettier": "^6.11.0",
+      "eslint-import-resolver-typescript": "^2.2.1",
+      "eslint-plugin-import": "^2.22.0",
+      "eslint-plugin-jest": "^23.20.0",
+      "fs-extra": "^9.0.1",
+      "jest": "^26.1.0",
+      "prettier": "2.1.1",
+      "rollup": "^2.22.1",
+      "rollup-plugin-json": "^4.0.0",
+      "rollup-plugin-node-resolve": "^5.2.0",
+      "rollup-plugin-sourcemaps": "^0.6.2",
+      "terser": "^5.2.1",
+      "ts-jest": "^26.1.3",
+      "tslint": "^6.1.2",
+      "typescript": "^4.0.2",
+      "yargs": "^15.4.1",
+      "zlib": "^1.0.5"
+   }
+}
