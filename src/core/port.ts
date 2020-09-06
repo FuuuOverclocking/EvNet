@@ -1,11 +1,16 @@
 import {
    ElementType,
    PortIORole,
-   NodeEventTypes,
+   NodeEvents,
    VirtualNodeActionTypes,
 } from 'core/types';
-import type { RemoteNode, VirtualNode, Port, Node } from 'core/types';
-import type { LocalNode } from 'core/local-node';
+import type {
+   LocalNode,
+   RemoteNode,
+   VirtualNode,
+   Port,
+   Node,
+} from 'core/types';
 import { log, withNC } from 'core/debug';
 import {
    isNode,
@@ -119,11 +124,11 @@ export class LocalPort<T = any> implements Port<T> {
          this._determineDirection(+this.isInner ^ myIOType!);
          this.links.push(port);
          this.node._emit(
-            NodeEventTypes.NodeDidPipeEvent,
-            port.node,
-            port,
+            NodeEvents.NodeDidPipeEvent,
             this.node,
             this,
+            port.node,
+            port,
             +this.isInner ^ myIOType!,
          );
       } else {
@@ -133,11 +138,11 @@ export class LocalPort<T = any> implements Port<T> {
 
          this.links.splice(index, 1);
          this.node._emit(
-            NodeEventTypes.NodeDidUnpipeEvent,
-            port.node,
-            port,
+            NodeEvents.NodeDidUnpipeEvent,
             this.node,
             this,
+            port.node,
+            port,
             this._ioType as any,
          );
          return true;
@@ -221,11 +226,11 @@ export class LocalPort<T = any> implements Port<T> {
 
       // 1. Trigger "NodeWillPipeEvent" on this node, if pipe is allowed, continue.
       const shouldPipe = this.node._emit(
-         NodeEventTypes.NodeWillPipeEvent,
-         thatPort.node,
-         thatPort,
+         NodeEvents.NodeWillPipeEvent,
          this.node,
          this,
+         thatPort.node,
+         thatPort,
          +this.isInner ^ PortIORole.Out,
       );
 
@@ -291,11 +296,11 @@ export class LocalPort<T = any> implements Port<T> {
          return false;
       }
       const shouldPipe = this.node._emit(
-         NodeEventTypes.NodeWillPipeEvent,
-         port.node,
-         port,
+         NodeEvents.NodeWillPipeEvent,
          this.node,
          this,
+         port.node,
+         port,
          +this.isInner ^ myIOType,
       );
       if (shouldPipe) {
@@ -338,11 +343,11 @@ export class LocalPort<T = any> implements Port<T> {
    public _bePiped(port: RemotePort): void {
       // 1. Trigger "NodeWillPipeEvent" on this node, if pipe is allowed, continue.
       const shouldPipe = this.node._emit(
-         NodeEventTypes.NodeWillPipeEvent,
-         port.node,
-         port,
+         NodeEvents.NodeWillPipeEvent,
          this.node,
          this,
+         port.node,
+         port,
          +this.isInner ^ PortIORole.In,
       );
 

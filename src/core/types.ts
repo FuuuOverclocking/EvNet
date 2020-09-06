@@ -41,6 +41,7 @@ export interface LocalDomain extends Domain {
    readonly id: string;
    readonly isLocal: true;
    readonly nodeUidCounter: number;
+   readonly nodeRunCounter: number;
 }
 
 export interface RemoteDomain extends Domain {
@@ -152,7 +153,7 @@ export interface NodeConsole {
    ///////////////////////////
 }
 
-export const enum NodeEventTypes {
+export const enum NodeEvents {
    NodeWillRunEvent,
    NodeDidRunEvent,
    NodeWillOutputEvent,
@@ -162,48 +163,58 @@ export const enum NodeEventTypes {
    ErrorEvent,
 }
 
+export const enum NodeEventPriority {
+   SystemHigh,
+   High,
+   Normal,
+   Low,
+   SystemLow,
+}
+
 export interface NodeWillRunControlObject {
    data: any;
+   readonly controlData: Readonly<NodeControlData>;
    preventRunning: boolean;
-   readonly port: LocalPort;
-   readonly wait: Array<Promise<void>>;
 }
 
 export type NodeWillRunEventHandler = (
    thisNode: LocalNode,
    control: NodeWillRunControlObject,
-) => void;
+) => void | Promise<void>;
+
+export interface NodeDidRunControlObject {
+   readonly data: any;
+   readonly controlData: Readonly<NodeControlData>;
+}
+
+export type NodeDidRunEventHandler = (
+   thisNode: Node,
+   control: NodeDidRunControlObject,
+) => void | Promise<void>;
 
 export type NodeWillPipeEventHandler = (
-   targetNode: Node,
-   targetPort: Port,
    thisNode: LocalNode,
    thisPort: LocalPort,
+   targetNode: Node,
+   targetPort: Port,
    thisPortDirection: PortIORole.In | PortIORole.Out,
 ) => boolean;
 
 export type NodeDidPipeEventHandler = (
-   targetNode: Node,
-   targetPort: Port,
    thisNode: LocalNode,
    thisPort: LocalPort,
+   targetNode: Node,
+   targetPort: Port,
    thisPortDirection: PortIORole.In | PortIORole.Out,
 ) => void;
 
 export type NodeDidUnpipeEventHandler = (
-   targetNode: Node,
-   targetPort: Port,
    thisNode: LocalNode,
    thisPort: LocalPort,
+   targetNode: Node,
+   targetPort: Port,
    thisPortDirection: PortIORole.In | PortIORole.Out,
 ) => void;
-
-export const enum PortIORole {
-   // Determine the values to 0 and 1 for bit operation.
-   Out = 0,
-   In = 1,
-   Undetermined = 2,
-}
 
 export interface PortLike {
    readonly type:
@@ -251,6 +262,14 @@ export interface Port<T = any> extends PortLike {
 
    /*@internal*/
    _notifyUnpipe(port: Port): void;
+}
+
+export const enum PortIORole {
+   // Determine the values to 0, 1 and 2 for
+   // bit operation and array accessing.
+   Out = 0,
+   In = 1,
+   Undetermined = 2,
 }
 
 export interface DefaultPorts<I = any, O = any> {

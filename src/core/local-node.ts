@@ -1,4 +1,9 @@
-import { ElementType, NodeEventTypes } from 'core/types';
+import {
+   ElementType,
+   NodeEvents,
+   NodeDidRunControlObject,
+   NodeDidRunEventHandler,
+} from 'core/types';
 import type {
    Node,
    RemoteNode,
@@ -17,8 +22,18 @@ import type {
    NodeDidUnpipeEventHandler,
 } from 'core/types';
 import { log } from 'core/debug';
-import { merge } from 'core/utilities';
-import { getNewLocalNodeUid, LocalDomain } from 'core/local-domain';
+import {
+   merge,
+   SortedPriorityQueue,
+   execAsap,
+   isPromise,
+   tryCatchThenAsap,
+} from 'core/utilities';
+import {
+   getNewLocalNodeUid,
+   LocalDomain,
+   getLocalNodeRunId,
+} from 'core/local-domain';
 import { PortSet } from 'core/portset';
 import { LocalPort } from 'core/port';
 import type { VirtualPort } from 'core/virtual-port';
@@ -46,12 +61,12 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
 
    /*@internal*/
    public _handlers: {
-      nodeWillRun?: NodeWillRunEventHandler[];
-      nodeDidRun: undefined;
-      nodeWillOutput: undefined;
-      nodeWillPipe?: NodeWillPipeEventHandler[];
-      nodeDidPipe?: NodeDidPipeEventHandler[];
-      nodeDidUnpipe?: NodeDidUnpipeEventHandler[];
+      nodeWillRun?: SortedPriorityQueue<NodeWillRunEventHandler>;
+      nodeDidRun?: SortedPriorityQueue<NodeDidRunEventHandler>;
+      nodeWillOutput?: undefined;
+      nodeWillPipe?: SortedPriorityQueue<NodeWillPipeEventHandler>;
+      nodeDidPipe?: SortedPriorityQueue<NodeDidPipeEventHandler>;
+      nodeDidUnpipe?: SortedPriorityQueue<NodeDidUnpipeEventHandler>;
       error: undefined;
    } = {
       nodeWillRun: void 0,
@@ -68,41 +83,68 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
     * @internal
     */
    public _emit(
-      type: NodeEventTypes.NodeWillRunEvent,
+      type: NodeEvents.NodeWillRunEvent,
       thisNode: this,
       control: NodeWillRunControlObject,
    ): void | Promise<void>;
    public _emit(
-      type: NodeEventTypes.NodeWillPipeEvent,
-      targetNode: Node,
-      targetPort: Port,
+      type: NodeEvents.NodeDidRunEvent,
+      thisNode: this,
+      control: NodeDidRunControlObject,
+   ): void | Promise<void>;
+   public _emit(
+      type: NodeEvents.NodeWillPipeEvent,
       thisNode: LocalNode,
       thisPort: LocalPort,
+      targetNode: Node,
+      targetPort: Port,
       thisPortDirection: PortIORole.In | PortIORole.Out,
    ): boolean;
    public _emit(
-      type: NodeEventTypes.NodeDidPipeEvent | NodeEventTypes.NodeDidUnpipeEvent,
-      targetNode: Node,
-      targetPort: Port,
+      type: NodeEvents.NodeDidPipeEvent | NodeEvents.NodeDidUnpipeEvent,
       thisNode: LocalNode,
       thisPort: LocalPort,
+      targetNode: Node,
+      targetPort: Port,
       thisPortDirection: PortIORole.In | PortIORole.Out,
    ): void;
-   public _emit(type: NodeEventTypes, ...args: any[]): any {
+   public _emit(type: NodeEvents, ...args: any[]): any {
       switch (type) {
-         case NodeEventTypes.NodeWillRunEvent: {
-            // should return nothing
+         case NodeEvents.NodeWillRunEvent: {
+            // should return void | Promise<void>
             if (!this._handlers.nodeWillRun) return;
-            const control = args[1] as NodeWillRunControlObject;
 
-            for (const handler of this._handlers.nodeWillRun) {
-               handler(...(args as [any, any]));
-               if (control.preventRunning) return;
+            const control = args[1] as NodeWillRunControlObject;
+            const handlers = this._handlers.nodeWillRun;
+
+            const len = handlers.length;
+            for (let i = 0; i < len; ++i) {
+               const promise = handlers[i](...(args as [any, any]));
+               if (control.preventRunning) {
+                  return;
+               }
+               if (promise !== void 0 && isPromise(promise)) {
+                  return handlers.slice(i + 1).reduce(
+                     (promise, fn) =>
+                        promise.then(() => {
+                           if (!control.preventRunning) {
+                              return fn(...(args as [any, any]));
+                           }
+                        }),
+                     promise,
+                  );
+               }
             }
 
             return;
          }
-         case NodeEventTypes.NodeWillPipeEvent:
+
+         case NodeEvents.NodeDidRunEvent:
+            // should return void | Promise<void>
+            if (!this._handlers.nodeDidRun) return;
+            return execAsap(this._handlers.nodeDidRun, args as [any, any]);
+
+         case NodeEvents.NodeWillPipeEvent:
             // should return boolean
             if (!this._handlers.nodeWillPipe) return true;
 
@@ -113,7 +155,7 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
             }
             return true;
 
-         case NodeEventTypes.NodeDidPipeEvent:
+         case NodeEvents.NodeDidPipeEvent:
             // should return nothing
             if (!this._handlers.nodeDidPipe) return;
 
@@ -121,7 +163,7 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
                handler(...(args as [any, any, any, any, any]));
             }
             return;
-         case NodeEventTypes.NodeDidUnpipeEvent:
+         case NodeEvents.NodeDidUnpipeEvent:
             // should return nothing
             if (!this._handlers.nodeDidUnpipe) return;
 
@@ -166,16 +208,31 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
       controlData?: NodeControlData,
       getInformation?: () => void,
    ): void | Promise<void> {
-      log.debug(`Node "${this.toString()}" start running.`);
-      // const control: {
-      //    data: any,
-      //    preventRunning: boolean,
-      //    readonly port: LocalPort,
-      // } = {
-      //    data,
-      //    preventRunning: false,
-      //    port,
-      // };
+      controlData || (controlData = {});
+
+      const runId = getLocalNodeRunId();
+      log.debug(`[RunID=${runId}] Node "${this.toString()}" start running.`);
+
+      const control: NodeWillRunControlObject = {
+         data,
+         controlData,
+         preventRunning: false,
+      };
+
+      tryCatchThenAsap(
+         /* try */
+         () => this._emit(NodeEvents.NodeWillRunEvent, this, control),
+         /* catch */
+         (e: any) => {
+            /////////////////////////
+         },
+         /* then */
+         () => {
+            if (control.preventRunning) {
+               ////////////////////////////
+            }
+         },
+      );
    }
 
    public pipe<U extends LocalNode<any, { $I: PickTypeOf$O<P> }>>(node: U): U;
