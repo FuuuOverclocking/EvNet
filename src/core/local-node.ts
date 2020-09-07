@@ -1,15 +1,10 @@
 import {
-   ElementType,
-   NodeEvents,
-   NodeDidRunControlObject,
-   NodeDidRunEventHandler,
-} from 'core/types';
-import type {
    Node,
    RemoteNode,
    VirtualNode,
    UnknownNode,
    Port,
+   VirtualPort,
    PortIORole,
    DefaultPorts as DP,
    NodeOnRun,
@@ -20,6 +15,12 @@ import type {
    NodeWillPipeEventHandler,
    NodeDidPipeEventHandler,
    NodeDidUnpipeEventHandler,
+   ElementType,
+   NodeEvents,
+   NodeDidRunControlObject,
+   NodeDidRunEventHandler,
+   NodeRunningStage,
+   NodeError,
 } from 'core/types';
 import { log } from 'core/debug';
 import {
@@ -27,7 +28,7 @@ import {
    SortedPriorityQueue,
    execAsap,
    isPromise,
-   tryCatchThenAsap,
+   Asap,
 } from 'core/utilities';
 import {
    getNewLocalNodeUid,
@@ -35,8 +36,7 @@ import {
    getLocalNodeRunId,
 } from 'core/local-domain';
 import { PortSet } from 'core/portset';
-import { LocalPort } from 'core/port';
-import type { VirtualPort } from 'core/virtual-port';
+import { LocalPort } from 'core/local-port';
 
 export class LocalNode<S = any, P extends object = DP> implements Node {
    /** Unique ID in LocalDomain used to identify the node */
@@ -108,6 +108,7 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
       targetPort: Port,
       thisPortDirection: PortIORole.In | PortIORole.Out,
    ): void;
+   public _emit(type: NodeEvents.ErrorEvent, nodeError: NodeError): void;
    public _emit(type: NodeEvents, ...args: any[]): any {
       switch (type) {
          case NodeEvents.NodeWillRunEvent: {
@@ -172,7 +173,18 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
             }
             return;
 
-         default:
+         case NodeEvents.ErrorEvent:
+            // should return nothing
+
+            /* 1. Execute all the event handlers, if the error is not caught, continue.
+             * 2. Output the NodeError object to port `$E`, if `$E` is not existent,
+             *    continue.
+             * 3. Pass NodeError to parent node, if parent is not existent, continue.
+             * 4. Report NodeError to the global error handler of LocalDomain.
+             * 5. (implement in LocalDomain) If there is no error handler, or handlers
+             *    cannot catch the error, transfer the error to the debug module.
+             */
+            return;
       }
    }
 
@@ -208,31 +220,59 @@ export class LocalNode<S = any, P extends object = DP> implements Node {
       controlData?: NodeControlData,
       getInformation?: () => void,
    ): void | Promise<void> {
-      controlData || (controlData = {});
+      controlData ?? (controlData = {});
 
       const runId = getLocalNodeRunId();
       log.debug(`[RunID=${runId}] Node "${this.toString()}" start running.`);
 
-      const control: NodeWillRunControlObject = {
+      let stage = NodeRunningStage.NodeWillRun;
+
+      /* NodeWillRun stage */
+      const willRunControl: NodeWillRunControlObject = {
          data,
          controlData,
          preventRunning: false,
       };
 
-      tryCatchThenAsap(
-         /* try */
-         () => this._emit(NodeEvents.NodeWillRunEvent, this, control),
-         /* catch */
-         (e: any) => {
-            /////////////////////////
+      Asap.tryCatch(
+         () => this._emit(NodeEvents.NodeWillRunEvent, this, willRunControl),
+         (e) => {
+            this._emit(NodeEvents.ErrorEvent, {
+               node: this,
+               error: e,
+               stage,
+               data,
+               controlData: controlData!,
+            });
+            log.debug(
+               `[RunID=${runId}] Node "${this.toString()}" end running at stage ${stage}.`,
+            );
          },
-         /* then */
-         () => {
-            if (control.preventRunning) {
-               ////////////////////////////
-            }
-         },
-      );
+      )
+         .thenTryCatch(
+            () => {
+               /* NodeIsRunning stage */
+               if (willRunControl.preventRunning) {
+                  log.debug(
+                     `[RunID=${runId}] Node "${this.toString()}" ` +
+                        `end running at stage ${stage}.`,
+                  );
+                  return;
+               }
+
+               stage = NodeRunningStage.NodeIsRunning;
+            },
+            (e) => {
+               ////////////////////////////////
+            },
+         )
+         .thenTryCatch(
+            () => {
+               /* NodeDidRun stage */
+               stage = NodeRunningStage.NodeDidRun;
+            },
+            (e) => {},
+         );
    }
 
    public pipe<U extends LocalNode<any, { $I: PickTypeOf$O<P> }>>(node: U): U;

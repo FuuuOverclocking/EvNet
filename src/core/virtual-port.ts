@@ -1,11 +1,12 @@
-import { ElementType, VirtualNodeActionTypes } from 'core/types';
-import type {
+import {
    Node,
    LocalNode,
    RemoteNode,
    VirtualNode,
    PortLike,
    Port,
+   ElementType,
+   VirtualNodeActionTypes,
 } from 'core/types';
 import { isNode, isVirtualNode, isPort, isVirtualPort } from 'core/utilities';
 import { log, withNC } from 'core/debug';

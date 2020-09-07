@@ -1,5 +1,10 @@
-import type { PortLike, RemoteNode, VirtualNode } from 'core/types';
-import type { LocalPort, RemotePort } from 'core/port';
+import type {
+   LocalPort,
+   RemotePort,
+   PortLike,
+   RemoteNode,
+   VirtualNode,
+} from 'core/types';
 import type { LocalNode } from 'core/local-node';
 
 type DecideNodeType<T extends PortLike> = T extends LocalPort

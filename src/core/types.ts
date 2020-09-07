@@ -1,6 +1,7 @@
 import type { LocalNode } from 'core/local-node';
 import type { LocalSubnet } from 'core/local-subnet';
-import type { LocalPort, RemotePort } from 'core/port';
+import type { LocalPort } from 'core/local-port';
+import type { RemotePort } from 'core/remote-port';
 import type { PortSet } from 'core/portset';
 import type { VirtualNodeActionQueue, NextNode } from 'core/virtual-node';
 import type { VirtualPort } from 'core/virtual-port';
@@ -139,9 +140,18 @@ export type VirtualNodeAction = {
 
 export type NodeOnRun = (console: NodeConsole) => void;
 
+export const enum NodeRunningStage {
+   NodeWillRun,
+   NodeIsRunning,
+   NodeDidRun,
+}
+
 export interface NodeError {
-   _nodeErrorBrand: any;
-   ////////////////////////////
+   node: Node;
+   error: Error;
+   stage: NodeRunningStage;
+   data: any;
+   controlData: NodeControlData;
 }
 
 export interface NodeControlData {

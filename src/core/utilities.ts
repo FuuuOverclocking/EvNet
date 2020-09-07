@@ -1,5 +1,27 @@
-import { ElementType } from 'core/types';
-import type { Node, VirtualNode, Port, VirtualPort } from 'core/types';
+import { Node, VirtualNode, Port, VirtualPort, ElementType } from 'core/types';
+
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+export function noop(): void {}
+
+export const promisePendingForever = new Promise<any>(noop);
+
+export function isNative(ctor: any): boolean {
+   return typeof ctor === 'function' && /native code/.test(ctor.toString());
+}
+
+export const hasSymbol =
+   typeof Symbol !== 'undefined' &&
+   isNative(Symbol) &&
+   typeof Reflect !== 'undefined' &&
+   isNative(Reflect.ownKeys);
+
+export function getSymbolAsValue(): symbol {
+   return hasSymbol ? Symbol() : ({} as symbol);
+}
+
+export function getSymbolAsKey(): symbol {
+   return hasSymbol ? Symbol() : ((randomString(32) as any) as symbol);
+}
 
 // shallow merge, faster than native implementation `Object.assign`
 export function merge<T, U>(target: T, source: U): T & U {
@@ -39,8 +61,6 @@ export function mergeTwo<T, U, V>(
  * with 0 and 1.
  */
 export function randomString(length = 10): string {
-   // "l", "o", "I" and "O" do not appear in the following string,
-   // because they are confusing.
    const chars = '0123456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ';
    let result = '';
    for (let i = 0; i < length; ++i) {
@@ -159,20 +179,67 @@ export class SortedPriorityQueue<E> extends Array<E> {
    }
 }
 
-export function tryCatchThenAsap(
-   fn: () => void | Promise<void>,
-   catchFn: (e: any) => void,
-   thenFn: () => void,
-): void {
-   let result: void | Promise<void>;
-   try {
-      result = fn();
-   } catch (e) {
-      catchFn(e);
+export class Asap {
+   private static cancelSymbol = getSymbolAsValue();
+
+   public static tryCatch(
+      tryFn: () => void | Promise<void>,
+      catchFn: (e: any) => void,
+   ): Asap {
+      let result: typeof Asap.prototype.result;
+      try {
+         result = tryFn();
+      } catch (e) {
+         catchFn(e);
+      }
+      if (isPromise(result)) {
+         result = result.catch((e) => {
+            catchFn(e);
+            return Asap.cancelSymbol;
+         });
+      }
+      return new Asap(result);
    }
-   if (isPromise(result)) {
-      result.then(thenFn, catchFn);
-   } else {
-      thenFn();
+
+   constructor(
+      /**
+       * if `result` is not undefined, then it must be a Promise
+       * in pending or resolved state, never in rejected state.
+       * */
+      private result: void | Promise<void | symbol>,
+   ) {}
+
+   public thenTryCatch(
+      tryFn: () => void | Promise<void>,
+      catchFn: (e: any) => void,
+   ): this {
+      let result = this.result;
+      if (isPromise(result)) {
+         result = result
+            .then((val) => {
+               if (val === Asap.cancelSymbol) {
+                  return val;
+               }
+               return tryFn();
+            })
+            .catch((e) => {
+               catchFn(e);
+               return Asap.cancelSymbol;
+            });
+      } else {
+         try {
+            result = tryFn();
+         } catch (e) {
+            catchFn(e);
+         }
+         if (isPromise(result)) {
+            result = result.catch((e) => {
+               catchFn(e);
+               return Asap.cancelSymbol;
+            });
+         }
+      }
+      this.result = result;
+      return this;
    }
 }

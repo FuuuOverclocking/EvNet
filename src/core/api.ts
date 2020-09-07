@@ -1,5 +1,4 @@
-import { logLevel } from 'core/debug';
-import { LogLevel } from 'core/debug/types';
+import { logLevel, LogLevel } from 'core/debug';
 import { LocalDomain, updateLocalDomainID } from 'core/local-domain';
 import { isInteger, merge, randomString } from 'core/utilities';
 

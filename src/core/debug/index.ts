@@ -1,3 +1,4 @@
+export * from 'core/debug/types';
 import { LogLevel } from 'core/debug/types';
 import type {
    LogService,

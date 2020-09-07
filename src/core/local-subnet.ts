@@ -1,6 +1,6 @@
 import type { DefaultPorts as DP, Subnet, Node } from 'core/types';
 import { LocalNode } from 'core/local-node';
-import { LocalPort } from 'core/port';
+import { LocalPort } from 'core/local-port';
 import { PortSet } from 'core/portset';
 
 export class LocalSubnet<S = any, P extends object = DP>
