@@ -1,313 +1,82 @@
 import {
    Node,
-   RemoteNode,
-   VirtualNode,
-   UnknownNode,
-   Port,
-   VirtualPort,
-   PortIORole,
    DefaultPorts as DP,
-   NodeOnRun,
-   NodeControlData,
-   PickTypeOf$O,
-   NodeWillRunEventHandler,
-   NodeWillRunControlObject,
-   NodeWillPipeEventHandler,
-   NodeDidPipeEventHandler,
-   NodeDidUnpipeEventHandler,
    ElementType,
-   NodeEvents,
-   NodeDidRunControlObject,
-   NodeDidRunEventHandler,
-   NodeRunningStage,
-   NodeError,
+   LocalGroup,
+   UnknownNode,
+   Dictionary,
+   NodePortsState,
+   NodeControlInfo,
 } from 'core/types';
-import { log } from 'core/debug';
-import {
-   merge,
-   SortedPriorityQueue,
-   execAsap,
-   isPromise,
-   Asap,
-} from 'core/utilities';
-import {
-   getNewLocalNodeUid,
-   LocalDomain,
-   getLocalNodeRunId,
-} from 'core/local-domain';
-import { PortSet } from 'core/portset';
-import { LocalPort } from 'core/local-port';
+import { merge, resolveValueAlongPath } from 'core/utilities';
+import { getNewLocalNodeUid, LocalDomain } from 'core/local-domain';
 
 export class LocalNode<S = any, P extends object = DP> implements Node {
+   /* Constants */
+
+   readonly type!: ElementType.LocalNode; // defined on prototype
+
+   /** The domain this node belongs. */
+   readonly domain!: LocalDomain; // defined on prototype
+
+   /** The groups this node is in. */
+   readonly group: LocalGroup[] | undefined;
+
    /** Unique ID in LocalDomain used to identify the node */
-   public readonly uid: number = getNewLocalNodeUid();
+   readonly uid: number = getNewLocalNodeUid();
 
-   public readonly type!: ElementType.LocalNode; // defined on prototype
+   /** The brand name of the generator that generated this node. */
+   readonly brand!: string;
 
-   // default value "LocalNode" is defined on prototype
-   public readonly brand!: string;
+   readonly isSubnet: boolean = false;
 
-   public readonly isSubnet: boolean = false;
+   /* Variables */
 
-   public readonly ports: PortSet<LocalPort> = new PortSet<LocalPort>(
-      LocalPort,
-      false,
-      this,
-   );
-   public readonly parent: Node | UnknownNode | undefined;
-   public readonly domain!: typeof LocalDomain; // defined on prototype
+   // prettier-ignore
+   readonly parent:
+      | Node
+      | UnknownNode  // has parent, but the parent does not belong to any known domains
+      | undefined    // should have parent, but is undefined at this moment
+      | null         // has no parent, because this node is a top-level node
+      = null;
+   readParent(): Promise<Node | UnknownNode | undefined | null> {
+      return Promise.resolve(this.parent);
+   }
 
-   constructor(public state: S, public onrun: NodeOnRun) {}
+   state: any;
+   readState(path?: string | string[] | Dictionary<string>): Promise<any> {
+      if (!path) return Promise.resolve(this.state);
 
-   /*@internal*/
-   public _handlers: {
-      nodeWillRun?: SortedPriorityQueue<NodeWillRunEventHandler>;
-      nodeDidRun?: SortedPriorityQueue<NodeDidRunEventHandler>;
-      nodeWillOutput?: undefined;
-      nodeWillPipe?: SortedPriorityQueue<NodeWillPipeEventHandler>;
-      nodeDidPipe?: SortedPriorityQueue<NodeDidPipeEventHandler>;
-      nodeDidUnpipe?: SortedPriorityQueue<NodeDidUnpipeEventHandler>;
-      error: undefined;
-   } = {
-      nodeWillRun: void 0,
-      nodeDidRun: void 0,
-      nodeWillOutput: void 0,
-      nodeWillPipe: void 0,
-      nodeDidPipe: void 0,
-      nodeDidUnpipe: void 0,
-      error: void 0,
-   };
-
-   /**
-    * Trigger a specific event on this node.
-    * @internal
-    */
-   public _emit(
-      type: NodeEvents.NodeWillRunEvent,
-      thisNode: this,
-      control: NodeWillRunControlObject,
-   ): void | Promise<void>;
-   public _emit(
-      type: NodeEvents.NodeDidRunEvent,
-      thisNode: this,
-      control: NodeDidRunControlObject,
-   ): void | Promise<void>;
-   public _emit(
-      type: NodeEvents.NodeWillPipeEvent,
-      thisNode: LocalNode,
-      thisPort: LocalPort,
-      targetNode: Node,
-      targetPort: Port,
-      thisPortDirection: PortIORole.In | PortIORole.Out,
-   ): boolean;
-   public _emit(
-      type: NodeEvents.NodeDidPipeEvent | NodeEvents.NodeDidUnpipeEvent,
-      thisNode: LocalNode,
-      thisPort: LocalPort,
-      targetNode: Node,
-      targetPort: Port,
-      thisPortDirection: PortIORole.In | PortIORole.Out,
-   ): void;
-   public _emit(type: NodeEvents.ErrorEvent, nodeError: NodeError): void;
-   public _emit(type: NodeEvents, ...args: any[]): any {
-      switch (type) {
-         case NodeEvents.NodeWillRunEvent: {
-            // should return void | Promise<void>
-            if (!this._handlers.nodeWillRun) return;
-
-            const control = args[1] as NodeWillRunControlObject;
-            const handlers = this._handlers.nodeWillRun;
-
-            const len = handlers.length;
-            for (let i = 0; i < len; ++i) {
-               const promise = handlers[i](...(args as [any, any]));
-               if (control.preventRunning) {
-                  return;
-               }
-               if (promise !== void 0 && isPromise(promise)) {
-                  return handlers.slice(i + 1).reduce(
-                     (promise, fn) =>
-                        promise.then(() => {
-                           if (!control.preventRunning) {
-                              return fn(...(args as [any, any]));
-                           }
-                        }),
-                     promise,
-                  );
-               }
-            }
-
-            return;
-         }
-
-         case NodeEvents.NodeDidRunEvent:
-            // should return void | Promise<void>
-            if (!this._handlers.nodeDidRun) return;
-            return execAsap(this._handlers.nodeDidRun, args as [any, any]);
-
-         case NodeEvents.NodeWillPipeEvent:
-            // should return boolean
-            if (!this._handlers.nodeWillPipe) return true;
-
-            for (const handler of this._handlers.nodeWillPipe) {
-               if (!handler(...(args as [any, any, any, any, any]))) {
-                  return false;
-               }
-            }
-            return true;
-
-         case NodeEvents.NodeDidPipeEvent:
-            // should return nothing
-            if (!this._handlers.nodeDidPipe) return;
-
-            for (const handler of this._handlers.nodeDidPipe) {
-               handler(...(args as [any, any, any, any, any]));
-            }
-            return;
-         case NodeEvents.NodeDidUnpipeEvent:
-            // should return nothing
-            if (!this._handlers.nodeDidUnpipe) return;
-
-            for (const handler of this._handlers.nodeDidUnpipe) {
-               handler(...(args as [any, any, any, any, any]));
-            }
-            return;
-
-         case NodeEvents.ErrorEvent:
-            // should return nothing
-
-            /* 1. Execute all the event handlers, if the error is not caught, continue.
-             * 2. Output the NodeError object to port `$E`, if `$E` is not existent,
-             *    continue.
-             * 3. Pass NodeError to parent node, if parent is not existent, continue.
-             * 4. Report NodeError to the global error handler of LocalDomain.
-             * 5. (implement in LocalDomain) If there is no error handler, or handlers
-             *    cannot catch the error, transfer the error to the debug module.
-             */
-            return;
+      if (typeof path === 'string') {
+         return Promise.resolve(resolveValueAlongPath(this.state, path));
       }
-   }
-
-   /**
-    * Return the `state` of this LocalNode directly.
-    */
-   public readState(): S;
-   /**
-    * Return the value of state parsed along the given path.
-    * @example
-    * readState("eat.big.apple")
-    * // return this.state.eat.big.apple
-    */
-   public readState(path: string): any;
-   public readState(path?: string): any {
-      if (!path) return this.state;
-
-      let result: any = this.state;
-      for (const prop of path.split('.')) {
-         if (result === void 0) return void 0;
-         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-         result = result[prop];
-      }
-      return result;
-   }
-
-   public toString(): string {
-      return `${this.domain.id}: ${this.brand}#${this.uid}`;
-   }
-
-   public run(
-      data?: any,
-      controlData?: NodeControlData,
-      getInformation?: () => void,
-   ): void | Promise<void> {
-      controlData ?? (controlData = {});
-
-      const runId = getLocalNodeRunId();
-      log.debug(`[RunID=${runId}] Node "${this.toString()}" start running.`);
-
-      let stage = NodeRunningStage.NodeWillRun;
-
-      /* NodeWillRun stage */
-      const willRunControl: NodeWillRunControlObject = {
-         data,
-         controlData,
-         preventRunning: false,
-      };
-
-      Asap.tryCatch(
-         () => this._emit(NodeEvents.NodeWillRunEvent, this, willRunControl),
-         (e) => {
-            this._emit(NodeEvents.ErrorEvent, {
-               node: this,
-               error: e,
-               stage,
-               data,
-               controlData: controlData!,
-            });
-            log.debug(
-               `[RunID=${runId}] Node "${this.toString()}" end running at stage ${stage}.`,
-            );
-         },
-      )
-         .thenTryCatch(
-            () => {
-               /* NodeIsRunning stage */
-               if (willRunControl.preventRunning) {
-                  log.debug(
-                     `[RunID=${runId}] Node "${this.toString()}" ` +
-                        `end running at stage ${stage}.`,
-                  );
-                  return;
-               }
-
-               stage = NodeRunningStage.NodeIsRunning;
-            },
-            (e) => {
-               ////////////////////////////////
-            },
-         )
-         .thenTryCatch(
-            () => {
-               /* NodeDidRun stage */
-               stage = NodeRunningStage.NodeDidRun;
-            },
-            (e) => {},
+      if (Array.isArray(path)) {
+         return Promise.resolve(
+            path.map((p) => resolveValueAlongPath(this.state, p)),
          );
+      }
+      if (typeof path === 'object') {
+         const result = {} as Dictionary<any>;
+         for (const [key, p] of Object.entries(path)) {
+            result[key] = resolveValueAlongPath(this.state, p);
+         }
+         return Promise.resolve(result);
+      }
+      return Promise.resolve();
    }
 
-   public pipe<U extends LocalNode<any, { $I: PickTypeOf$O<P> }>>(node: U): U;
-   public pipe(node: RemoteNode): RemoteNode;
-   public pipe<U extends Port<PickTypeOf$O<P>>>(port: U): void;
-   public pipe<U extends VirtualNode>(node: U): U;
-   public pipe(port: VirtualPort): void;
-   public pipe(sth: any): any {
-      return this.ports.get('$O').pipe(sth);
+   readonly portsState: NodePortsState = {};
+   readPortsState(): Promise<NodePortsState> {
+      return Promise.resolve(this.portsState);
    }
 
-   public alsoPipe<U extends LocalNode<any, { $I: PickTypeOf$O<P> }>>(
-      node: U,
-   ): this;
-   public alsoPipe(node: RemoteNode): this;
-   public alsoPipe<U extends Port<PickTypeOf$O<P>>>(port: U): this;
-   public alsoPipe<U extends VirtualNode>(node: U): this;
-   public alsoPipe(port: VirtualPort): this;
-   public alsoPipe(sth: any): any {
-      this.ports.get('$O').pipe(sth);
-      return this;
-   }
-
-   public unpipe<U extends LocalNode<any, { $I: PickTypeOf$O<P> }>>(
-      node: U,
-   ): this;
-   public unpipe(port: Port): this;
-   public unpipe(sth: any): this {
-      this.ports.get('$O').unpipe(sth);
-      return this;
+   run(data?: any, controlInfo?: NodeControlInfo): void | Promise<void> {
+      ////////////
    }
 }
 
 merge(LocalNode.prototype, {
-   brand: 'LocalNode',
+   brand: 'EvNode',
    domain: LocalDomain,
    type: ElementType.LocalNode,
 });

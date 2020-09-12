@@ -1,4 +1,4 @@
-import type { Node } from 'core/types';
+import { Node } from 'core/types';
 
 export const enum LogLevel {
    Off = 0,
@@ -12,11 +12,9 @@ export interface LogService {
    input(level: LogLevel, s: string | LoggableObject): void;
 }
 
-export interface LoggableObject {
-   msg: string;
-}
+export type LoggableObject = MessageWithNodeAndComponent;
 
-export interface MessageWithNodeAndComponent extends LoggableObject {
+export interface MessageWithNodeAndComponent {
    msg: string;
    node?: Node;
    comp?: string;

@@ -4,9 +4,9 @@ export const presetConfig = {
 } as const;
 
 /************* Exports of this entry *************/
-export * from './core/api';
+export * from './core';
 
-import { configure } from './core/api';
+import { configure } from './core';
 configure(presetConfig);
 
 /* eventnet.attrs */

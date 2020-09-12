@@ -1,11 +1,11 @@
 export * from 'core/debug/types';
-import { LogLevel } from 'core/debug/types';
-import type {
+import {
+   LogLevel,
    LogService,
    LoggableObject,
    MessageWithNodeAndComponent,
 } from 'core/debug/types';
-import type { Node } from 'core/types';
+import { Node } from 'core/types';
 
 let currentLogLevel = LogLevel.Info;
 

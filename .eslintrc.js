@@ -4,8 +4,7 @@ const error = 2;
 module.exports = {
    // Stop ESLint from looking for a configuration file in parent folders
    root: true,
-
-   plugins: ['@typescript-eslint', 'jest', 'import'],
+   plugins: ['@typescript-eslint', 'jest'],
    env: {
       browser: true,
       es2017: true,
@@ -13,9 +12,6 @@ module.exports = {
    },
    extends: [
       'eslint:recommended',
-      'plugin:import/errors',
-      'plugin:import/warnings',
-      'plugin:import/typescript',
       'plugin:@typescript-eslint/recommended',
       'plugin:@typescript-eslint/recommended-requiring-type-checking',
       'plugin:jest/recommended',
@@ -30,18 +26,7 @@ module.exports = {
       project: ['./src/tsconfig.json', './tsconfig.eslint.json'],
       tsconfigRootDir: __dirname,
    },
-   settings: {
-      'import/parsers': {
-         '@typescript-eslint/parser': ['.ts', '.tsx'],
-      },
-      'import/resolver': {
-         typescript: {
-            project: ['src/tsconfig.json'],
-         },
-      },
-   },
    rules: {
-      'import/export': off,
       '@typescript-eslint/ban-types': [
          error,
          {

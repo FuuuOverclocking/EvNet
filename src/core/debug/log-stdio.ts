@@ -1,8 +1,8 @@
 import { registerLogService } from 'core/debug';
 import type { LogLevel, LoggableObject } from 'core/debug/types';
 
-const logServiceSTDIO = {
+const logServiceStdIO = {
    input(level: LogLevel, s: string | LoggableObject) {},
 };
 
-registerLogService(logServiceSTDIO);
+registerLogService(logServiceStdIO);
