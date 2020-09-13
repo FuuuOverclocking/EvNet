@@ -39,6 +39,7 @@ export function resolveValueAlongPath(obj: any, path: string): any {
             return parseBracket();
          case '.':
             pos += 1;
+         // eslint-disable-next-line no-fallthrough
          default:
             return parseProperty();
       }

@@ -1,18 +1,25 @@
 import type { Dictionary } from 'core/utility-types';
-export type { Dictionary };
+
+export type {
+   Dictionary,
+   Has$I,
+   PickTypeOf$I,
+   Has$O,
+   PickTypeOf$O,
+} from 'core/utility-types';
 
 export const enum ElementType {
    LocalDomain,
-   LocalGroup,
-   LocalNode,
-   LocalPort,
    RemoteDomain,
+   LocalGroup,
    RemoteGroup,
+   LocalNode,
    RemoteNode,
-   RemotePort,
    VirtualNode,
-   VirtualPort,
    UnknownNode,
+   LocalPort,
+   RemotePort,
+   VirtualPort,
 }
 
 export interface Domain {
@@ -21,9 +28,10 @@ export interface Domain {
    /** Domain ID, used to uniquely identify a domain among interconnected domains. */
    readonly id: string;
 
-   /** Every time the program runs, `randomRunId` is assigned a random number. */
+   /** Every time the program re-runs, `randomRunId` is assigned a new random number. */
    readonly randomRunId: string;
 
+   /** Is this a local domain? */
    readonly isLocal: boolean;
 }
 
@@ -74,7 +82,7 @@ export interface Node extends NodeLike {
       | UnknownNode  // has parent, but the parent does not belong to any known domains
       | undefined    // should have parent, but is undefined at this moment
       | null         // has no parent, because this node is a top-level node
-      | "deny"        // access denied
+      | "deny"       // access denied
       ;
    readParent(): Promise<Node | UnknownNode | undefined | null> | 'deny';
 
@@ -90,22 +98,16 @@ export interface Node extends NodeLike {
 
    run(data?: any, controlInfo?: NodeControlInfo): void | Promise<void>;
 
-   /* Link */
-   readonly ports: PortSet<LocalPort | RemotePort> | 'deny';
+   /* Net structure */
 
-   pipe<U extends LocalNode>(node: U): U;
-   pipe(node: RemoteNode): RemoteNode;
-   pipe(port: Port): void;
-   pipe<U extends VirtualNode>(node: U): U;
-   pipe(port: VirtualPort): void;
+   readonly ports: PortSet<Port>;
 
-   alsoPipe(node: Node): this;
-   alsoPipe(port: Port): this;
-   alsoPipe(node: VirtualNode): this;
-   alsoPipe(port: VirtualPort): this;
+   pipe<U extends Node | VirtualNode>(node: U): U;
+   pipe(port: Port | VirtualPort): void;
 
-   unpipe(node: Node): this;
-   unpipe(port: Port): this;
+   alsoPipe(nodeOrPort: Node | VirtualNode | Port | VirtualPort): this;
+
+   unpipe(nodeOrPort: Node | Port): this;
 
    isChildOf(node: Subnet): 'deny' | boolean | Promise<'deny' | boolean>;
    isDescendantOf(node: Subnet): 'deny' | boolean | Promise<'deny' | boolean>;
@@ -115,7 +117,7 @@ export interface Node extends NodeLike {
    on(event: string | NodeEventType, handler: Function, options?: any): void;
 
    /*@internal*/
-   _emit(...args: any[]): any;
+   _emit(event: NodeEventType, args: any[]): any;
 
    /* Other */
    toString(): string;
@@ -123,7 +125,7 @@ export interface Node extends NodeLike {
 
 export interface Subnet extends Node {
    readonly isSubnet: true;
-   readonly innerPorts: PortSet<LocalPort | RemotePort>;
+   readonly innerPorts: PortSet<Port>;
    readonly children: Set<Node>;
 }
 
@@ -133,11 +135,8 @@ export type EvNode<S = any, P extends object = DefaultPorts> = LocalNode<S, P> &
    };
 
 import type { LocalNode } from 'core/local-node';
-export { LocalNode };
-
-export interface UnknownNode extends NodeLike {
-   readonly type: ElementType.UnknownNode;
-}
+import type { RemoteNode } from 'core/remote-node';
+export type { LocalNode, RemoteNode };
 
 export interface VirtualNode extends NodeLike {
    readonly type: ElementType.VirtualNode;
@@ -147,6 +146,12 @@ export interface VirtualNode extends NodeLike {
 
 export const enum VirtualNodeActionType {
    Pipe,
+   AddEventHandler,
+   Input,
+}
+
+export interface UnknownNode extends NodeLike {
+   readonly type: ElementType.UnknownNode;
 }
 
 export type NodePortsState = Partial<
@@ -158,9 +163,9 @@ export type NodePortsState = Partial<
    }>
 >;
 
-export type NodeOnRun<T extends object> = (console: NodeConsole<T>) => void;
+export type NodeOnRun<P extends object> = (console: NodeConsole<P>) => void;
 
-export type NodeConsole<T extends object> = {
+export type NodeConsole<P extends object> = {
    _nodeConsoleBrand: any;
    ///////////////////////////
 };
@@ -282,6 +287,9 @@ export interface NodeErrorEvent extends NodeEventHandler {
    ): /* error is caught? */ boolean | void;
 }
 
+import type { PortSet } from 'core/port-set';
+export type { PortSet };
+
 export interface PortLike {
    readonly type:
       | ElementType.LocalPort
@@ -306,30 +314,26 @@ export interface Port extends PortLike {
 
    put(data: any): void;
 
-   pipe<U extends LocalNode>(node: U): U;
-   pipe(node: RemoteNode): RemoteNode;
-   pipe(port: Port): void;
-   pipe<U extends VirtualNode>(node: U): U;
-   pipe(port: VirtualPort): void;
+   pipe<U extends Node | VirtualNode>(node: U): U;
+   pipe(port: Port | VirtualPort): void;
 
-   // /*@internal*/
-   // _beRequestedPipe(
-   //    port: Port,
-   //    myIOType: PortIORole.In | PortIORole.Out,
-   // ): boolean | Promise<boolean>;
+   /*@internal*/
+   _beRequestedPipe(
+      port: Port,
+      myIOType: PortIORole.In | PortIORole.Out,
+   ): boolean | Promise<boolean>;
 
-   alsoPipe(node: LocalNode): this;
-   alsoPipe(node: RemoteNode): this;
-   alsoPipe(port: Port): this;
-   alsoPipe(node: VirtualNode): this;
-   alsoPipe(port: VirtualPort): this;
-
-   unpipe(node: Node): this;
-   unpipe(port: Port): this;
+   alsoPipe(nodeOrPort: Node | VirtualNode | Port | VirtualPort): this;
+   unpipe(nodeOrPort: Node | Port): this;
 
    /*@internal*/
    _notifyUnpipe(port: Port): void;
 }
+
+import type { LocalPort } from 'core/local-port';
+import type { RemotePort } from 'core/remote-port';
+import type { VirtualPort } from 'core/virtual-port';
+export type { LocalPort, RemotePort, VirtualPort };
 
 export const enum PortIORole {
    // Determine the values to 0, 1 and 2 for
@@ -345,8 +349,3 @@ export interface DefaultPorts<I = any, O = any> {
    $E: NodeError;
    [port: string]: any;
 }
-
-export type Has$I = { $I: any };
-export type PickTypeOf$I<P> = P extends Has$I ? P['$I'] : any;
-export type Has$O = { $O: any };
-export type PickTypeOf$O<P> = P extends Has$O ? P['$O'] : any;

@@ -63,3 +63,7 @@ export function withNC(
 export function registerLogService(...services: LogService[]): void {
    logServices.push(...services);
 }
+
+/* Install `LogService`s */
+
+import 'core/debug/log-services/stdio';

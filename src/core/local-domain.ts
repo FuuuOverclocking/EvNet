@@ -1,14 +1,14 @@
 import { log } from 'core/debug';
-import { ElementType, Domain } from 'core/types';
 import { randomString } from 'core/utilities';
-import { RemoteDomain } from 'core/remote-domain';
+import { ElementType, Domain, RemoteDomain } from 'core/types';
 
 export interface LocalDomain extends Domain {
    readonly type: ElementType.LocalDomain;
    /** Domain ID, used to uniquely identify a domain among interconnected domains. */
    readonly id: string;
-   /** Every time the program runs, `randomRunId` is assigned a random string. */
+   /** Every time the program re-runs, `randomRunId` is assigned a new random number. */
    readonly randomRunId: string;
+   /** Is this a local domain? */
    readonly isLocal: true;
    readonly nodeUidCounter: number;
    readonly nodeRunIdCounter: number;

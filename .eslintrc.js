@@ -48,5 +48,6 @@ module.exports = {
       '@typescript-eslint/restrict-template-expressions': off,
       curly: [error, 'multi-line'],
       'max-len': [error, { code: 95 }],
+      'no-constant-condition': ['error', { checkLoops: false }],
    },
 };
